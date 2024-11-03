@@ -1,4 +1,7 @@
 import java.util.*;
+import java.sql.*;
+import java.util.Date;
+import java.util.GregorianCalendar;
 
 class Task implements Comparable<Task> {
     private int id;
@@ -62,59 +65,105 @@ class Task implements Comparable<Task> {
 }
 
 class TaskManager {
-    private int nextId = 1;
-    private PriorityQueue<Task> taskQueue;
-    private HashMap<Integer, Task> taskMap;
+    private Connection connection;
 
+    // Constructor to establish a database connection
     public TaskManager() {
-        taskQueue = new PriorityQueue<>();
-        taskMap = new HashMap<>();
+        try {
+            // Connect to the database
+            connection = DriverManager.getConnection(
+                    "jdbc:mysql://localhost:3306/TaskDB", "root", "Vishnu@3");
+            System.out.println("Connected to the database.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
+    // Add Task to Database
     public void addTask(String title, String description, int priority, Date dueDate) {
-        Task task = new Task(nextId++, title, description, priority, dueDate);
-        taskQueue.add(task);
-        taskMap.put(task.getId(), task);
-        System.out.println("Task added successfully.");
+        String query = "INSERT INTO Tasks (title, description, priority, due_date) VALUES (?, ?, ?, ?)";
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            statement.setString(1, title);
+            statement.setString(2, description);
+            statement.setInt(3, priority);
+            statement.setDate(4, new java.sql.Date(dueDate.getTime()));
+            statement.executeUpdate();
+            System.out.println("Task added successfully to the database.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
+    // Delete Task from Database
     public void deleteTask(int id) {
-        Task task = taskMap.remove(id);
-        if (task != null) {
-            taskQueue.remove(task);
-            System.out.println("Task deleted successfully.");
-        } else {
-            System.out.println("Task not found.");
+        String query = "DELETE FROM Tasks WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            statement.setInt(1, id);
+            int rowsDeleted = statement.executeUpdate();
+            if (rowsDeleted > 0) {
+                System.out.println("Task deleted successfully from the database.");
+            } else {
+                System.out.println("Task not found.");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 
+    // Update Task in Database
     public void updateTask(int id, String title, String description, int priority, Date dueDate) {
-        Task task = taskMap.get(id);
-        if (task != null) {
-            task.setTitle(title);
-            task.setDescription(description);
-            task.setPriority(priority);
-            task.setDueDate(dueDate);
-            taskQueue.remove(task);
-            taskQueue.add(task);
-            System.out.println("Task updated successfully.");
-        } else {
-            System.out.println("Task not found.");
+        String query = "UPDATE Tasks SET title = ?, description = ?, priority = ?, due_date = ? WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            statement.setString(1, title);
+            statement.setString(2, description);
+            statement.setInt(3, priority);
+            statement.setDate(4, new java.sql.Date(dueDate.getTime()));
+            statement.setInt(5, id);
+            int rowsUpdated = statement.executeUpdate();
+            if (rowsUpdated > 0) {
+                System.out.println("Task updated successfully in the database.");
+            } else {
+                System.out.println("Task not found.");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 
+    // Retrieve and Display Tasks from Database
     public void displayTasks() {
-        if (taskQueue.isEmpty()) {
-            System.out.println("No tasks available.");
-            return;
-        }
+        String query = "SELECT * FROM Tasks ORDER BY priority DESC, due_date ASC";
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(query)) {
 
-        PriorityQueue<Task> tempQueue = new PriorityQueue<>(taskQueue);
-        while (!tempQueue.isEmpty()) {
-            System.out.println(tempQueue.poll());
+            while (resultSet.next()) {
+                int id = resultSet.getInt("id");
+                String title = resultSet.getString("title");
+                String description = resultSet.getString("description");
+                int priority = resultSet.getInt("priority");
+                Date dueDate = resultSet.getDate("due_date");
+
+                System.out.println("Task ID: " + id + ", Title: " + title + ", Priority: " + priority + ", Due Date: " + dueDate);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Close Database Connection
+    public void closeConnection() {
+        try {
+            if (connection != null && !connection.isClosed()) {
+                connection.close();
+                System.out.println("Database connection closed.");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 }
+
 
 public class TaskManagementApp {
     public static void main(String[] args) {
@@ -130,7 +179,7 @@ public class TaskManagementApp {
             System.out.println("5. Exit");
             System.out.print("Enter your choice: ");
             int choice = scanner.nextInt();
-            scanner.nextLine();
+            scanner.nextLine();  // Consume newline
 
             switch (choice) {
                 case 1:
@@ -183,6 +232,7 @@ public class TaskManagementApp {
                     break;
 
                 case 5:
+                    taskManager.closeConnection();
                     System.out.println("Exiting Task Management System.");
                     return;
 
